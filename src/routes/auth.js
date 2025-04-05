@@ -3,12 +3,25 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { validateAppAttest } = require('../middleware/auth');
 const { validationResult } = require('express-validator');
-const admin = require('../config/firebase');
+const dataService = require('../services/dataService');
+const appAttest = require('../services/appAttest');
+const crypto = require('crypto');
+
+// Check if running in development mode
+const isDev = process.env.NODE_ENV === 'development';
 
 // Generate a challenge for App Attest
-router.get('/challenge', (req, res) => {
-  const challenge = Math.random().toString(36).substring(2);
-  res.json({ challenge });
+router.get('/app-attest-challenge', (req, res) => {
+  try {
+    // Generate a random challenge
+    const challenge = crypto.randomBytes(32).toString('base64');
+    
+    // Return the challenge to the client
+    res.json({ challenge });
+  } catch (error) {
+    console.error('Challenge generation error:', error);
+    res.status(500).json({ error: 'Failed to generate challenge' });
+  }
 });
 
 // Verify App Attest and issue JWT
@@ -53,21 +66,32 @@ router.post('/verify', validateAppAttest, async (req, res) => {
 // Apple App Attest verification endpoint
 router.post('/verify-app-attest', validateAppAttest, async (req, res) => {
   try {
+    // In development mode, bypass attestation verification
+    if (isDev) {
+      return res.json({
+        verified: true,
+        deviceId: 'dev-device-id'
+      });
+    }
+    
     const { attestation, challenge } = req.body;
     
     // Verify the attestation with Apple's DeviceCheck API
-    const verificationResult = await verifyAppAttest(attestation, challenge);
+    const verificationResult = await appAttest.verifyAttestation(
+      Buffer.from(attestation, 'base64'),
+      challenge
+    );
     
     if (!verificationResult.verified) {
       return res.status(400).json({ error: 'Invalid attestation' });
     }
 
-    // Store the device ID in Firestore
-    const deviceRef = admin.firestore().collection('devices').doc(verificationResult.deviceId);
-    await deviceRef.set({
-      lastVerified: admin.firestore.FieldValue.serverTimestamp(),
-      attestationVerified: true
-    }, { merge: true });
+    // Store the device ID in local JSON file
+    const success = await dataService.storeVerifiedDevice(verificationResult.deviceId);
+    
+    if (!success) {
+      return res.status(500).json({ error: 'Failed to store device verification' });
+    }
 
     res.json({
       verified: true,
@@ -82,13 +106,23 @@ router.post('/verify-app-attest', validateAppAttest, async (req, res) => {
 // JWT token generation endpoint
 router.post('/token', async (req, res) => {
   try {
+    // In development mode, generate a token without verification
+    if (isDev) {
+      const token = jwt.sign(
+        { deviceId: 'dev-device-id' },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+      );
+      
+      return res.json({ token });
+    }
+    
     const { deviceId } = req.body;
     
-    // Verify device exists and is attested
-    const deviceRef = admin.firestore().collection('devices').doc(deviceId);
-    const deviceDoc = await deviceRef.get();
+    // Verify device exists and is attested using local JSON file
+    const isVerified = await dataService.isDeviceVerified(deviceId);
     
-    if (!deviceDoc.exists || !deviceDoc.data().attestationVerified) {
+    if (!isVerified) {
       return res.status(401).json({ error: 'Invalid device ID' });
     }
 
@@ -96,7 +130,7 @@ router.post('/token', async (req, res) => {
     const token = jwt.sign(
       { deviceId },
       process.env.JWT_SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
     );
 
     res.json({ token });
@@ -105,6 +139,28 @@ router.post('/token', async (req, res) => {
     res.status(500).json({ error: 'Failed to generate token' });
   }
 });
+
+// Development-only endpoint for easy token generation
+if (isDev) {
+  router.get('/dev-token', (req, res) => {
+    try {
+      const token = jwt.sign(
+        { deviceId: 'dev-device-id' },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+      );
+      
+      res.json({ 
+        message: 'Development token generated',
+        token,
+        usage: 'Add this token to your requests as: "Authorization: Bearer <token>"'
+      });
+    } catch (error) {
+      console.error('Dev token generation error:', error);
+      res.status(500).json({ error: 'Failed to generate development token' });
+    }
+  });
+}
 
 /**
  * Verifies an Apple App Attest attestation

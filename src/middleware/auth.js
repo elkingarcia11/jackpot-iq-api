@@ -6,16 +6,21 @@
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 
+// Check if running in development mode
+const isDev = process.env.NODE_ENV === 'development';
+
 /**
  * Validates the Apple App Attest request body
  * Ensures all required fields are present and properly formatted
  * Used in the /api/auth/verify endpoint
  */
-const validateAppAttest = [
-  body('attestation').isString().notEmpty(),
-  body('challenge').isString().notEmpty(),
-  body('keyId').isString().notEmpty(),
-];
+const validateAppAttest = isDev 
+  ? [(req, res, next) => next()] // Bypass in development mode
+  : [
+      body('attestation').isString().notEmpty(),
+      body('challenge').isString().notEmpty(),
+      body('keyId').isString().notEmpty(),
+    ];
 
 /**
  * Middleware to verify JWT tokens in request headers
@@ -28,6 +33,13 @@ const validateAppAttest = [
  * @returns {Object} 401 response if token is missing or invalid
  */
 const verifyToken = (req, res, next) => {
+  // Skip token verification in development mode
+  if (isDev) {
+    console.log('[DEV MODE] Bypassing token verification');
+    req.user = { deviceId: 'dev-device-id' };
+    return next();
+  }
+  
   // Extract token from Authorization header (format: "Bearer <token>")
   const token = req.headers.authorization?.split(' ')[1];
   
@@ -47,27 +59,22 @@ const verifyToken = (req, res, next) => {
 };
 
 /**
- * Middleware to validate lottery type parameter
- * Ensures the lottery type is either 'megamillion' or 'powerball'
- * Checks type in params, query, or body
- * 
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next middleware function
- * @returns {Object} 400 response if lottery type is invalid
+ * Middleware to validate lottery type
  */
 const validateLotteryType = (req, res, next) => {
-  const validTypes = ['megamillion', 'powerball'];
-  // Check type in params, query, or body (in order of precedence)
-  const type = req.params.type || req.query.type || req.body.type;
-
+  const validTypes = ['mega-millions', 'powerball'];
+  
+  // Get type from query or body
+  const type = req.method === 'GET' ? req.query.type : req.body.type;
+  
   if (!validTypes.includes(type)) {
     return res.status(400).json({ 
-      error: 'Invalid lottery type',
-      validTypes 
+      error: `Invalid lottery type. Must be one of: ${
+        validTypes.join(', ')
+      }` 
     });
   }
-
+  
   next();
 };
 

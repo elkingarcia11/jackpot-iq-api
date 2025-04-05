@@ -1,12 +1,36 @@
 const cbor = require('cbor');
 const crypto = require('crypto');
 const https = require('https');
+const asn1 = require('asn1.js');
 
 class AppAttestService {
   constructor() {
-    this.appleRootCA = Buffer.from(process.env.APPLE_ROOT_CA, 'base64');
-    this.teamId = process.env.APPLE_TEAM_ID;
-    this.bundleId = process.env.APPLE_BUNDLE_ID;
+    // Check if we're in development mode
+    const isDev = process.env.NODE_ENV === 'development';
+    
+    // In development mode, use mock values if environment variables are missing
+    if (isDev && (!process.env.APPLE_ROOT_CA || !process.env.APPLE_TEAM_ID || !process.env.APPLE_BUNDLE_ID)) {
+      console.warn('⚠️ Using mock Apple App Attest values in development mode. This will not work in production!');
+      this.appleRootCA = Buffer.from('mockCertificateForDevelopment');
+      this.teamId = process.env.APPLE_TEAM_ID || 'MOCK_TEAM_ID';
+      this.bundleId = process.env.APPLE_BUNDLE_ID || 'com.example.app';
+    } else {
+      // In production, use the actual environment variables
+      this.appleRootCA = Buffer.from(process.env.APPLE_ROOT_CA || '', 'base64');
+      this.teamId = process.env.APPLE_TEAM_ID;
+      this.bundleId = process.env.APPLE_BUNDLE_ID;
+    }
+    
+    // Define ASN.1 structures for receipt parsing
+    this.ReceiptASN = asn1.define('Receipt', function() {
+      this.seq().obj(
+        this.key('version').int(),
+        this.key('signature').octstr(),
+        this.key('receiptType').int(),
+        this.key('receiptData').octstr(),
+        this.key('deviceId').octstr()
+      );
+    });
   }
 
   /**
@@ -111,12 +135,127 @@ class AppAttestService {
    * @returns {Promise<boolean>}
    */
   async verifyCertificateChain(certChain) {
-    // TODO: Implement certificate chain verification
-    // This should verify that:
-    // 1. The leaf certificate is issued by Apple
-    // 2. The chain leads to the Apple root CA
-    // 3. All certificates are valid and not expired
-    return true;
+    try {
+      // Verify each certificate in the chain
+      for (let i = 0; i < certChain.length - 1; i++) {
+        const currentCert = certChain[i];
+        const nextCert = certChain[i + 1];
+        
+        // Verify certificate is valid and not expired
+        if (!this.isValidCertificate(currentCert)) {
+          console.error('Certificate validation failed:', i);
+          return false;
+        }
+
+        // Verify certificate is signed by the next certificate in chain
+        if (!this.verifyCertificateSignature(currentCert, nextCert)) {
+          console.error('Certificate signature verification failed:', i);
+          return false;
+        }
+      }
+
+      // Verify the last certificate is signed by Apple's root CA
+      const lastCert = certChain[certChain.length - 1];
+      if (!this.verifyCertificateSignature(lastCert, this.appleRootCA)) {
+        console.error('Root CA verification failed');
+        return false;
+      }
+
+      // Verify the leaf certificate is for our app
+      const leafCert = certChain[0];
+      if (!this.verifyLeafCertificate(leafCert)) {
+        console.error('Leaf certificate verification failed');
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Certificate chain verification error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Checks if a certificate is valid and not expired
+   * @param {Buffer} cert - Certificate buffer
+   * @returns {boolean}
+   */
+  isValidCertificate(cert) {
+    try {
+      const certObj = new crypto.X509Certificate(cert);
+      const now = Date.now();
+      
+      // Check if certificate is expired
+      if (now < certObj.validFrom.getTime() || now > certObj.validTo.getTime()) {
+        return false;
+      }
+
+      // Check if certificate is revoked (optional)
+      // This would require implementing OCSP checking
+      
+      return true;
+    } catch (error) {
+      console.error('Certificate validation error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Verifies that a certificate is signed by another certificate
+   * @param {Buffer} cert - Certificate to verify
+   * @param {Buffer} signingCert - Certificate that should have signed the first certificate
+   * @returns {boolean}
+   */
+  verifyCertificateSignature(cert, signingCert) {
+    try {
+      const certObj = new crypto.X509Certificate(cert);
+      const signingCertObj = new crypto.X509Certificate(signingCert);
+      
+      return crypto.verify(
+        'sha256',
+        certObj.signature,
+        {
+          key: signingCertObj.publicKey,
+          padding: crypto.constants.RSA_PKCS1_PSS_PADDING
+        },
+        certObj.signature
+      );
+    } catch (error) {
+      console.error('Certificate signature verification error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Verifies that the leaf certificate is for our app
+   * @param {Buffer} cert - Leaf certificate
+   * @returns {boolean}
+   */
+  verifyLeafCertificate(cert) {
+    try {
+      const certObj = new crypto.X509Certificate(cert);
+      
+      // Check if certificate is issued by Apple
+      if (!certObj.issuer.includes('Apple')) {
+        return false;
+      }
+
+      // Check if certificate is for our app
+      const subject = certObj.subject;
+      if (!subject.includes(this.bundleId)) {
+        return false;
+      }
+
+      // Check if certificate is for our team
+      if (!subject.includes(this.teamId)) {
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Leaf certificate verification error:', error);
+      return false;
+    }
   }
 
   /**
@@ -142,13 +281,34 @@ class AppAttestService {
   extractDeviceId(attestation) {
     try {
       const receipt = Buffer.from(attestation.attStmt.receipt, 'base64');
-      // TODO: Parse the receipt and extract the device ID
-      // This requires implementing ASN.1 DER decoding
-      return 'device-id-from-receipt';
+      
+      // Parse the ASN.1 receipt
+      const decodedReceipt = this.ReceiptASN.decode(receipt, 'der');
+      
+      // Extract the device ID
+      const deviceId = decodedReceipt.deviceId.toString('hex');
+      
+      // Verify the device ID format
+      if (!this.isValidDeviceId(deviceId)) {
+        console.error('Invalid device ID format');
+        return null;
+      }
+
+      return deviceId;
     } catch (error) {
       console.error('Device ID extraction error:', error);
       return null;
     }
+  }
+
+  /**
+   * Validates the device ID format
+   * @param {string} deviceId - Device ID to validate
+   * @returns {boolean}
+   */
+  isValidDeviceId(deviceId) {
+    // Device ID should be a 32-byte (64 character) hex string
+    return /^[0-9a-f]{64}$/i.test(deviceId);
   }
 
   /**

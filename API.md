@@ -82,7 +82,7 @@ Retrieves comprehensive statistics for a specific lottery type, including freque
 
 **Query Parameters:**
 
-- `type` (required): The type of lottery (`megamillion` or `powerball`)
+- `type` (required): The type of lottery (`mega-millions` or `powerball`)
 
 **Response:**
 
@@ -148,7 +148,9 @@ Retrieves comprehensive statistics for a specific lottery type, including freque
     "11": 18,
     "12": 15
     // ... special ball numbers up to 25 for Mega Millions or 26 for Powerball
-  }
+  },
+  "optimizedByPosition": [2, 17, 31, 38, 50, 3],
+  "optimizedByGeneralFrequency": [10, 17, 20, 31, 46, 3]
 }
 ```
 
@@ -164,27 +166,32 @@ Retrieves comprehensive statistics for a specific lottery type, including freque
 
 ### Get Latest Lottery Draws
 
-Retrieves the latest lottery draws for a specific lottery type.
+Returns the most recent lottery draws.
 
 **Endpoint:** `GET /api/lottery`
 
 **Query Parameters:**
 
-- `type` (required): The type of lottery (`megamillion` or `powerball`)
-- `offset` (optional): Number of records to skip (default: 0)
-- `limit` (optional): Maximum number of records to return (default: 20, max: 100)
+- `type` (required): The type of lottery (`mega-millions` or `powerball`)
+- `limit` (optional): Maximum number of draws to return (default: 10)
+- `offset` (optional): Number of draws to skip (for pagination) (default: 0)
 
 **Response:**
 
 ```json
 [
   {
-    "id": "2024-03-31",
-    "type": "megamillion",
-    "numbers": [5, 12, 19, 27, 35],
-    "specialBall": 7
+    "specialBall": 3,
+    "date": "2023-04-01",
+    "numbers": [11, 12, 21, 29, 49],
+    "type": "mega-millions"
+  },
+  {
+    "specialBall": 23,
+    "date": "2023-03-28",
+    "numbers": [2, 9, 31, 60, 63],
+    "type": "mega-millions"
   }
-  // ... more draws
 ]
 ```
 
@@ -192,13 +199,13 @@ Retrieves the latest lottery draws for a specific lottery type.
 
 ```json
 {
-  "error": "Failed to fetch draws"
+  "error": "Failed to retrieve lottery draws"
 }
 ```
 
 ### Search Lottery Draws
 
-Searches for specific lottery draws matching the provided numbers and special ball.
+Search for specific lottery draws by numbers and/or special ball.
 
 **Endpoint:** `POST /api/lottery/search`
 
@@ -206,30 +213,21 @@ Searches for specific lottery draws matching the provided numbers and special ba
 
 ```json
 {
-  "type": "megamillion",
-  "numbers": [5, 12, 19, 27, 35],
-  "specialBall": 7
+  "type": "mega-millions",
+  "numbers": [1, 2, 3, 4, 5],
+  "specialBall": 10
 }
 ```
-
-**Validation Rules:**
-
-- For Mega Millions:
-  - Numbers must be between 1 and 70
-  - Special ball must be between 1 and 25
-- For Powerball:
-  - Numbers must be between 1 and 69
-  - Special ball must be between 1 and 26
 
 **Response:**
 
 ```json
 [
   {
-    "id": "2024-03-31",
-    "type": "megamillion",
-    "numbers": [5, 12, 19, 27, 35],
-    "specialBall": 7
+    "specialBall": 10,
+    "date": "2023-01-10",
+    "numbers": [1, 2, 3, 4, 5],
+    "type": "mega-millions"
   }
 ]
 ```
@@ -240,9 +238,9 @@ Searches for specific lottery draws matching the provided numbers and special ba
 {
   "errors": [
     {
-      "msg": "Numbers must be between 1 and 70",
-      "param": "numbers.0",
-      "location": "body"
+      "location": "body",
+      "msg": "Numbers must be integers between 1 and 70",
+      "param": "numbers"
     }
   ]
 }
@@ -250,55 +248,21 @@ Searches for specific lottery draws matching the provided numbers and special ba
 
 ### Generate Random Numbers
 
-Generates random lottery numbers that haven't been drawn before.
+Generate random lottery numbers for a specific lottery type.
 
 **Endpoint:** `GET /api/lottery/generate-random`
 
 **Query Parameters:**
 
-- `type` (required): The type of lottery (`megamillion` or `powerball`)
+- `type` (required): The type of lottery (`mega-millions` or `powerball`)
 
 **Response:**
 
 ```json
 {
-  "numbers": [5, 12, 19, 27, 35],
+  "type": "mega-millions",
+  "numbers": [7, 23, 34, 51, 69],
   "specialBall": 7
-}
-```
-
-**Error Response:**
-
-```json
-{
-  "error": "Failed to generate numbers"
-}
-```
-
-### Generate Optimized Numbers
-
-Generates lottery numbers based on historical frequency analysis.
-
-**Endpoint:** `GET /api/lottery/generate-optimized`
-
-**Query Parameters:**
-
-- `type` (required): The type of lottery (`megamillion` or `powerball`)
-
-**Response:**
-
-```json
-{
-  "numbers": [5, 12, 19, 27, 35],
-  "specialBall": 7
-}
-```
-
-**Error Response:**
-
-```json
-{
-  "error": "Failed to generate optimized numbers"
 }
 ```
 

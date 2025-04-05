@@ -67,57 +67,67 @@ Generate a challenge for App Attest verification.
 
 Verify App Attest and receive a JWT token.
 
-### Lottery Draws
+### Lottery Endpoints
 
-#### GET /api/lottery-draws
+#### Get Latest Lottery Draws
 
-Get latest lottery draws with pagination.
+```
+GET /api/lottery?type=mega-millions&limit=10&offset=0
+```
 
 Query Parameters:
 
-- `type`: "megamillion" or "powerball"
-- `offset`: Pagination offset (default: 0)
-- `limit`: Number of draws to return (default: 20)
+- `type`: "mega-millions" or "powerball"
+- `limit`: Maximum number of draws to return (default: 10)
+- `offset`: Number of draws to skip (for pagination) (default: 0)
 
-#### POST /api/lottery-draws/search
+#### Search Lottery Draws
 
-Search for specific lottery draws.
+```
+POST /api/lottery/search
+```
 
 Request Body:
 
 ```json
 {
-  "type": "megamillion",
-  "numbers": [5, 12, 19, 27, 35],
-  "specialBall": 7 // optional
+  "type": "mega-millions",
+  "numbers": [1, 2, 3, 4, 5],
+  "specialBall": 10
 }
 ```
 
-#### GET /api/lottery-draws/generate-random
+Validation Rules:
 
-Generate random lottery numbers.
+- `type`: "mega-millions" or "powerball"
+- For Mega Millions:
+  - Numbers must be between 1 and 70
+  - Special ball must be between 1 and 25
+- For Powerball:
+  - Numbers must be between 1 and 69
+  - Special ball must be between 1 and 26
+
+#### Generate Random Numbers
+
+```
+GET /api/lottery/generate-random?type=mega-millions
+```
 
 Query Parameters:
 
-- `type`: "megamillion" or "powerball"
+- `type`: "mega-millions" or "powerball"
 
-#### GET /api/lottery-draws/generate-optimized
+### Statistics Endpoints
 
-Generate optimized lottery numbers based on historical statistics.
+#### Get Lottery Statistics
+
+```
+GET /api/stats?type=mega-millions
+```
 
 Query Parameters:
 
-- `type`: "megamillion" or "powerball"
-
-### Statistics
-
-#### GET /api/stats/:type
-
-Get statistics for a specific lottery type.
-
-Path Parameters:
-
-- `type`: "megamillion" or "powerball"
+- `type`: "mega-millions" or "powerball"
 
 ## Security
 
@@ -153,6 +163,30 @@ The project uses ESLint for code linting. Run:
 ```bash
 npm run lint
 ```
+
+## Local Development
+
+### Running without Authentication
+
+For local development, the API can be run without App Attest authentication. This makes it easier to test your endpoints without setting up the attestation process.
+
+1. Make sure `NODE_ENV=development` is set in your `.env` file
+2. Start the server: `npm run dev`
+3. The auth middleware will automatically bypass token verification
+
+To get a development token for testing:
+
+```
+GET /api/auth/dev-token
+```
+
+This endpoint returns a JWT token that you can use for all authenticated endpoints. Use it by adding the following header to your requests:
+
+```
+Authorization: Bearer <token>
+```
+
+All other endpoints will work normally, but without requiring actual authentication.
 
 ## License
 
