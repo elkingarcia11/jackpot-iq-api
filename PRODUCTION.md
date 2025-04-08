@@ -13,10 +13,10 @@ This guide provides instructions for deploying the Jackpot IQ API in a productio
 1. Copy the example environment file to create your production configuration:
 
 ```bash
-cp .env.example .env.production
+cp .env.example .env
 ```
 
-2. Edit `.env.production` and set all required values:
+2. Edit `.env` and set all required values:
 
 ```
 # Server Configuration
@@ -44,6 +44,33 @@ APPLE_BUNDLE_ID=<your_app_bundle_id>
 3. Get your team ID from the Apple Developer portal
 4. Set your app's bundle ID in the environment config
 5. Obtain Apple's root CA certificate and encode it in base64
+
+### Securely Handling App Attestation Credentials
+
+For the Apple App Attestation root certificate, download it from Apple's servers and convert it to base64:
+
+```bash
+# Download the certificate (if needed)
+curl -o AppleAppAttestRootCA.pem https://www.apple.com/certificateauthority/AppleAppAttestRootCA.pem
+
+# Convert to base64 format
+cat AppleAppAttestRootCA.pem | base64 -w 0 > apple_root_ca.base64.txt
+```
+
+Then securely add this to your environment:
+
+1. Store these credentials in a secure environment variable management system (like AWS Secrets Manager, HashiCorp Vault, or Docker secrets)
+2. NEVER commit these credentials to version control or include them in Docker images
+3. Consider using runtime secret injection rather than environment files
+4. If using Kubernetes, use Secrets for storing these values
+
+#### Credentials Security Checklist
+
+- [ ] Apple Root CA certificate is base64 encoded and stored securely
+- [ ] Team ID and Bundle ID are protected from unauthorized access
+- [ ] Environment files containing credentials are in `.gitignore`
+- [ ] Production deploy scripts do not output or log these credentials
+- [ ] Rotate or refresh credentials according to your security policy
 
 ## Building and Deploying
 

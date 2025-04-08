@@ -27,5 +27,4 @@ Thumbs.db
 .vscode
 .idea
 *.sublime-*
-
-.env
+service-account-credentials.json

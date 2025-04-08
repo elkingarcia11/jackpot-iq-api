@@ -138,6 +138,23 @@ Query Parameters:
 - CORS protection
 - Compression for responses
 
+### Environment Variables Security
+
+The application uses several sensitive environment variables that need to be properly secured:
+
+- `APPLE_ROOT_CA`: The base64-encoded Apple App Attestation Root Certificate
+- `APPLE_TEAM_ID`: Your Apple Developer Team ID
+- `APPLE_BUNDLE_ID`: Your application's bundle identifier
+- `JWT_SECRET`: Secret used for signing authentication tokens
+
+For production deployments:
+
+1. Never commit `.env` files to version control
+2. Use a secure secret management system (AWS Secrets Manager, HashiCorp Vault, etc.)
+3. Rotate the JWT secret periodically
+4. Limit access to these credentials on a need-to-know basis
+5. For detailed guidance on handling Apple App Attestation credentials, see PRODUCTION.md
+
 ## Error Handling
 
 The API uses standard HTTP status codes:
