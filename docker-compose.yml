@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  jackpot-iq-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jackpot-iq-api:1.0.0
+    container_name: jackpot-iq-api
+    volumes:
+      - ./data:/usr/src/app/data
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/auth/app-attest-challenge"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s 

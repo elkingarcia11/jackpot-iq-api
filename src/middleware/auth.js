@@ -4,23 +4,18 @@
  */
 
 const jwt = require('jsonwebtoken');
-const { body, validationResult } = require('express-validator');
-
-// Check if running in development mode
-const isDev = process.env.NODE_ENV === 'development';
+const { body } = require('express-validator');
 
 /**
  * Validates the Apple App Attest request body
  * Ensures all required fields are present and properly formatted
  * Used in the /api/auth/verify endpoint
  */
-const validateAppAttest = isDev 
-  ? [(req, res, next) => next()] // Bypass in development mode
-  : [
-      body('attestation').isString().notEmpty(),
-      body('challenge').isString().notEmpty(),
-      body('keyId').isString().notEmpty(),
-    ];
+const validateAppAttest = [
+  body('attestation').isString().notEmpty(),
+  body('challenge').isString().notEmpty(),
+  body('keyID').isString().notEmpty(),
+];
 
 /**
  * Middleware to verify JWT tokens in request headers
@@ -33,13 +28,6 @@ const validateAppAttest = isDev
  * @returns {Object} 401 response if token is missing or invalid
  */
 const verifyToken = (req, res, next) => {
-  // Skip token verification in development mode
-  if (isDev) {
-    console.log('[DEV MODE] Bypassing token verification');
-    req.user = { deviceId: 'dev-device-id' };
-    return next();
-  }
-  
   // Extract token from Authorization header (format: "Bearer <token>")
   const token = req.headers.authorization?.split(' ')[1];
   
