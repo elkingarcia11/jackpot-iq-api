@@ -1,6 +1,6 @@
 # Jackpot IQ API
 
-A secure REST API for lottery number generation and analysis, built with Node.js, Express, and Firebase.
+A secure REST API for lottery number generation and analysis, built with Node.js and Express.
 
 ## Features
 
@@ -10,11 +10,11 @@ A secure REST API for lottery number generation and analysis, built with Node.js
 - Optimized number generation based on historical statistics
 - Real-time statistics and analysis
 - Rate limiting and security measures
+- Google Cloud Storage integration for data persistence
 
 ## Prerequisites
 
 - Node.js (v14 or higher)
-- Firebase project with Firestore database
 - Apple Developer account for App Attest
 
 ## Setup
@@ -40,7 +40,6 @@ cp .env.example .env
 
 4. Configure your environment variables in `.env`:
 
-- Firebase configuration
 - JWT secret
 - Apple App Attest credentials
 - Rate limiting settings

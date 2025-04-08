@@ -8,6 +8,7 @@ services:
     image: jackpot-iq-api:1.0.0
     container_name: jackpot-iq-api
     volumes:
+      # Still useful as a local cache and fallback for GCS
       - ./data:/usr/src/app/data
     ports:
       - "3000:3000"

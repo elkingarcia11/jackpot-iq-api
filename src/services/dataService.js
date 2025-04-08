@@ -1,9 +1,10 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { Storage } = require('@google-cloud/storage');
 
 class DataService {
   constructor() {
-    this.dataDir = path.join(process.cwd(), 'data');
+    this.localDataDir = path.join(process.cwd(), 'data');
     this.lotteryTypes = ['mega-millions', 'powerball'];
     this.fileMap = {
       'mega-millions': 'mm.json',
@@ -11,6 +12,26 @@ class DataService {
       'mega-millions-stats': 'mm-stats.json',
       'powerball-stats': 'pb-stats.json'
     };
+    
+    // Google Cloud Storage configuration
+    this.useGCS = process.env.USE_GCS === 'true';
+    this.gcsBucket = process.env.GCS_BUCKET || 'jackpot-iq';
+    
+    // In GCS, the files should be in the data/ directory
+    this.gcsDataPrefix = process.env.GCS_DATA_PREFIX || 'data/';
+    
+    // Initialize GCS client if enabled
+    if (this.useGCS) {
+      try {
+        this.storage = new Storage();
+        this.bucket = this.storage.bucket(this.gcsBucket);
+        console.log(`GCS initialized with bucket: ${this.gcsBucket}`);
+      } catch (error) {
+        console.error('Error initializing Google Cloud Storage:', error);
+        // Fallback to local storage if GCS fails
+        this.useGCS = false;
+      }
+    }
   }
 
   /**
@@ -19,31 +40,61 @@ class DataService {
    */
   async ensureDataDir() {
     try {
-      await fs.access(this.dataDir);
+      await fs.access(this.localDataDir);
     } catch (error) {
       // Directory doesn't exist, create it
-      await fs.mkdir(this.dataDir, { recursive: true });
+      await fs.mkdir(this.localDataDir, { recursive: true });
     }
   }
 
   /**
-   * Get the path to a JSON file
+   * Get the path to a JSON file (local version)
    * @param {string} type - The type of file to get
    * @returns {string} The full path to the file
    */
-  getFilePath(type) {
+  getLocalFilePath(type) {
     const fileName = this.fileMap[type] || `${type}.json`;
-    return path.join(this.dataDir, fileName);
+    return path.join(this.localDataDir, fileName);
   }
 
   /**
-   * Read data from a JSON file
+   * Get the GCS path to a JSON file
+   * @param {string} type - The type of file to get
+   * @returns {string} The path to the file in GCS
+   */
+  getGCSFilePath(type) {
+    const fileName = this.fileMap[type] || `${type}.json`;
+    // Always return paths with the data/ prefix
+    return `${this.gcsDataPrefix}${fileName}`;
+  }
+
+  /**
+   * Read data from a JSON file (either local or GCS)
    * @param {string} type - The type of file to read
    * @returns {Promise<Object|Array>} The data from the file
    */
   async readData(type) {
     try {
-      const filePath = this.getFilePath(type);
+      if (this.useGCS) {
+        return await this.readDataFromGCS(type);
+      } else {
+        return await this.readDataFromLocal(type);
+      }
+    } catch (error) {
+      console.error(`Error reading data (${type}):`, error);
+      // Return empty data structure based on expected type
+      return this.lotteryTypes.includes(type) ? [] : {};
+    }
+  }
+
+  /**
+   * Read data from a local JSON file
+   * @param {string} type - The type of file to read
+   * @returns {Promise<Object|Array>} The data from the file
+   */
+  async readDataFromLocal(type) {
+    try {
+      const filePath = this.getLocalFilePath(type);
       const data = await fs.readFile(filePath, 'utf8');
       return JSON.parse(data);
     } catch (error) {
@@ -56,15 +107,122 @@ class DataService {
   }
 
   /**
-   * Write data to a JSON file
+   * Read data from Google Cloud Storage
+   * @param {string} type - The type of file to read
+   * @returns {Promise<Object|Array>} The data from the file
+   */
+  async readDataFromGCS(type) {
+    try {
+      const filePath = this.getGCSFilePath(type);
+      console.log(`Reading from GCS: ${filePath}`);
+      
+      const file = this.bucket.file(filePath);
+      const exists = await file.exists();
+      
+      if (!exists[0]) {
+        console.log(`File does not exist in GCS: ${filePath}`);
+        // File doesn't exist, return empty based on expected type
+        return this.lotteryTypes.includes(type) ? [] : {};
+      }
+      
+      const [content] = await file.download();
+      const data = content.toString('utf8');
+      
+      // Cache data locally for fallback
+      await this.cacheDataLocally(type, data);
+      
+      return JSON.parse(data);
+    } catch (error) {
+      console.error(`Error reading from GCS (${type}):`, error);
+      
+      // Try to fallback to local cache
+      console.log('Attempting to use local cache as fallback');
+      return await this.readDataFromLocal(type);
+    }
+  }
+
+  /**
+   * Cache data from GCS locally
+   * @param {string} type - The type of file
+   * @param {string} data - The JSON data as string
+   * @returns {Promise<void>}
+   */
+  async cacheDataLocally(type, data) {
+    try {
+      await this.ensureDataDir();
+      const filePath = this.getLocalFilePath(type);
+      await fs.writeFile(filePath, data, 'utf8');
+      console.log(`Cached GCS data locally: ${filePath}`);
+    } catch (error) {
+      console.error(`Error caching data locally (${type}):`, error);
+    }
+  }
+
+  /**
+   * Write data to a JSON file (either local or GCS)
    * @param {string} type - The type of file to write
    * @param {Object|Array} data - The data to write
    * @returns {Promise<void>}
    */
   async writeData(type, data) {
+    // Only allow writing to verified-devices.json
+    if (type !== 'verified-devices' && this.lotteryTypes.includes(type) || type.endsWith('-stats')) {
+      console.error(`Cannot write to read-only file: ${type}`);
+      throw new Error(`Cannot write to read-only file: ${type}`);
+    }
+    
+    const jsonData = JSON.stringify(data, null, 2);
+    
+    try {
+      // Always write locally as a backup
+      await this.writeDataToLocal(type, jsonData);
+      
+      // Write to GCS if enabled
+      if (this.useGCS) {
+        await this.writeDataToGCS(type, jsonData);
+      }
+    } catch (error) {
+      console.error(`Error writing data (${type}):`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Write data to a local JSON file
+   * @param {string} type - The type of file to write
+   * @param {string} jsonData - The stringified JSON data
+   * @returns {Promise<void>}
+   */
+  async writeDataToLocal(type, jsonData) {
     await this.ensureDataDir();
-    const filePath = this.getFilePath(type);
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
+    const filePath = this.getLocalFilePath(type);
+    await fs.writeFile(filePath, jsonData, 'utf8');
+  }
+
+  /**
+   * Write data to Google Cloud Storage
+   * @param {string} type - The type of file to write
+   * @param {string} jsonData - The stringified JSON data
+   * @returns {Promise<void>}
+   */
+  async writeDataToGCS(type, jsonData) {
+    try {
+      const filePath = this.getGCSFilePath(type);
+      console.log(`Writing to GCS: ${filePath}`);
+      
+      const file = this.bucket.file(filePath);
+      await file.save(jsonData, {
+        contentType: 'application/json',
+        metadata: {
+          cacheControl: 'no-cache'
+        }
+      });
+      
+      console.log(`Successfully wrote to GCS: ${filePath}`);
+    } catch (error) {
+      console.error(`Error writing to GCS (${type}):`, error);
+      throw error;
+    }
   }
 
   /**
@@ -80,7 +238,7 @@ class DataService {
         throw new Error(`Invalid lottery type: ${type}`);
       }
 
-      // Read draws directly from the existing mm.json or pb.json
+      // Read draws from the configured storage (GCS or local)
       const draws = await this.readData(type);
       
       // If there are no draws, return empty array
@@ -110,7 +268,7 @@ class DataService {
         throw new Error(`Invalid lottery type: ${type}`);
       }
 
-      // Read draws directly from the existing mm.json or pb.json
+      // Read draws from the configured storage (GCS or local)
       const draws = await this.readData(type);
       
       // If there are no draws, return empty array
@@ -151,7 +309,7 @@ class DataService {
         throw new Error(`Invalid lottery type: ${type}`);
       }
 
-      // Read stats directly from the existing mm-stats.json or pb-stats.json
+      // Read stats from the configured storage (GCS or local)
       return await this.readData(`${type}-stats`);
     } catch (error) {
       console.error(`Error getting lottery statistics: ${error.message}`);
@@ -170,8 +328,14 @@ class DataService {
    * @param {string} type - The lottery type
    * @param {Object} draw - The draw data
    * @returns {Promise<boolean>} Whether the operation was successful
+   * @deprecated Lottery data files are read-only
    */
   async addLotteryDraw(type, draw) {
+    console.warn('addLotteryDraw is deprecated. Lottery data files are read-only.');
+    return false;
+    
+    // The code below is kept for reference but will not be executed
+    /* 
     try {
       if (!this.lotteryTypes.includes(type)) {
         throw new Error(`Invalid lottery type: ${type}`);
@@ -204,6 +368,7 @@ class DataService {
       console.error(`Error adding lottery draw: ${error.message}`);
       return false;
     }
+    */
   }
 
   /**
