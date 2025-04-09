@@ -60,7 +60,14 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 app.use(compression());
-app.use(morgan('dev'));
+
+// Use appropriate morgan logging format based on environment
+if (process.env.NODE_ENV === 'production') {
+  app.use(morgan('combined')); // More detailed logs for production
+} else {
+  app.use(morgan('dev')); // Concise colored logs for development
+}
+
 app.use(express.json());
 
 // Rate limiting
@@ -117,7 +124,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
 // Check data files before starting the server
 verifyDataFiles().then(() => {

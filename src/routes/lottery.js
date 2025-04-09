@@ -21,6 +21,24 @@ const setCacheHeaders = (res, defaultMaxAge = 300, contentType = 'data') => {
   res.set('ETag', getETag());
 };
 
+// Helper function for error responses that's production-safe
+const handleError = (res, error, message) => {
+  // Log the full error for server-side debugging
+  console.error(message, error);
+  
+  // In production, send generic error message without details
+  // In development, include more information for debugging
+  if (process.env.NODE_ENV === 'production') {
+    res.status(500).json({ error: message });
+  } else {
+    res.status(500).json({ 
+      error: message,
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 // Get latest lottery draws
 router.get('/', 
   verifyToken,
@@ -39,8 +57,7 @@ router.get('/',
 
       res.json(draws);
     } catch (error) {
-      console.error('Error retrieving lottery draws:', error);
-      res.status(500).json({ error: 'Failed to retrieve lottery draws' });
+      handleError(res, error, 'Failed to retrieve lottery draws');
     }
   });
 
@@ -77,8 +94,7 @@ router.get('/search',
 
       res.json(results);
     } catch (error) {
-      console.error('Error searching lottery draws:', error);
-      res.status(500).json({ error: 'Failed to search lottery draws' });
+      handleError(res, error, 'Failed to search lottery draws');
     }
   });
 
@@ -119,8 +135,7 @@ router.get('/generate-random',
         specialBall
       });
     } catch (error) {
-      console.error('Error generating random numbers:', error);
-      res.status(500).json({ error: 'Failed to generate random numbers' });
+      handleError(res, error, 'Failed to generate random numbers');
     }
 });
 

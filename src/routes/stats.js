@@ -20,6 +20,24 @@ const setCacheHeaders = (res, defaultMaxAge = 300, contentType = 'stats') => {
   res.set('ETag', getETag());
 };
 
+// Helper function for error responses that's production-safe
+const handleError = (res, error, message) => {
+  // Log the full error for server-side debugging
+  console.error(message, error);
+  
+  // In production, send generic error message without details
+  // In development, include more information for debugging
+  if (process.env.NODE_ENV === 'production') {
+    res.status(500).json({ error: message });
+  } else {
+    res.status(500).json({ 
+      error: message,
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 // Get lottery statistics
 router.get('/', verifyToken, validateLotteryType, async (req, res) => {
   try {
@@ -37,8 +55,7 @@ router.get('/', verifyToken, validateLotteryType, async (req, res) => {
     
     res.json(stats);
   } catch (error) {
-    console.error('Error retrieving statistics:', error);
-    res.status(500).json({ error: 'Failed to retrieve statistics' });
+    handleError(res, error, 'Failed to retrieve statistics');
   }
 });
 

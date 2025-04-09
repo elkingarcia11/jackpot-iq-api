@@ -20,7 +20,6 @@ cp .env.example .env
 
 ```
 # Server Configuration
-PORT=3000
 NODE_ENV=production
 
 # JWT Configuration
@@ -44,6 +43,16 @@ GCS_DATA_PREFIX=data/
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/your-service-account-key.json
 ```
 
+## Security Enhancements
+
+The API includes several security enhancements for production:
+
+1. **Production Error Handling**: Error details are hidden in production to prevent information disclosure
+2. **Logging**: Uses Morgan 'combined' format in production for more detailed logs
+3. **HTTP Headers**: Helmet is used to set secure headers
+4. **Caching Strategy**: Intelligent caching based on data update patterns
+5. **Rate Limiting**: Protects against abuse and DoS attacks
+
 ## Google Cloud Storage Setup
 
 1. Create a Google Cloud Storage bucket named `jackpot-iq` (or use an existing one)
@@ -59,3 +68,15 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/your-service-account-key.json
 The application will look for files in the directory specified by the `GCS_DATA_PREFIX` environment variable within your bucket. If this variable is not set, it defaults to "data/".
 
 If the app can't connect to Google Cloud Storage, it will fall back to local files in the `data` directory.
+
+## Docker Deployment
+
+Run the application using Docker Compose:
+
+```bash
+docker-compose up -d
+```
+
+## Cloud Run Deployment
+
+For deploying to Google Cloud Run, refer to the "Cloud Hosting Migration" section in the README.md file.

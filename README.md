@@ -154,6 +154,20 @@ For production deployments:
 4. Limit access to these credentials on a need-to-know basis
 5. For detailed guidance on handling Apple App Attestation credentials, see PRODUCTION.md
 
+## Cloud Hosting Migration
+
+### Google Cloud Run Deployment
+
+To migrate this application to cloud hosting:
+
+1. Set up continuous deployment for Cloud Run via Google Cloud Console
+2. Add all environment variables to Secret Manager
+3. Expose port 3000 on the Cloud Run container
+4. Reference secrets as environment variables in Cloud Run configuration
+5. Authorize GitHub permissions for Cloud Run to listen to repo and continuous build and deployment will be triggered on main branch updates
+
+The application is designed to work seamlessly with Google Cloud Storage for data persistence, making it ideal for serverless deployments on Cloud Run.
+
 ## Error Handling
 
 The API uses standard HTTP status codes:
@@ -188,21 +202,9 @@ For local development, the API can be run without App Attest authentication. Thi
 
 1. Make sure `NODE_ENV=development` is set in your `.env` file
 2. Start the server: `npm run dev`
-3. The auth middleware will automatically bypass token verification
+3. The auth middleware will automatically bypass token verification in development mode
 
-To get a development token for testing:
-
-```
-GET /api/auth/dev-token
-```
-
-This endpoint returns a JWT token that you can use for all authenticated endpoints. Use it by adding the following header to your requests:
-
-```
-Authorization: Bearer <token>
-```
-
-All other endpoints will work normally, but without requiring actual authentication.
+For local testing, you can manually create a JWT token using the JWT_SECRET in your .env file, or set up a simple testing client that mimics the attestation process.
 
 ## License
 

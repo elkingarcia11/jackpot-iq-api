@@ -10,27 +10,17 @@ Authorization: Bearer <jwt_token>
 
 ## Authentication Endpoints
 
-### Verify App Attest
+### Get App Attest Challenge
 
-Verifies the Apple App Attest attestation for iOS devices.
+Generates a random challenge for App Attest verification.
 
-**Endpoint:** `POST /api/auth/verify-app-attest`
-
-**Request Body:**
-
-```json
-{
-  "attestation": "base64_encoded_attestation",
-  "challenge": "random_challenge_string"
-}
-```
+**Endpoint:** `GET /api/auth/app-attest-challenge`
 
 **Response:**
 
 ```json
 {
-  "verified": true,
-  "deviceId": "unique_device_identifier"
+  "challenge": "base64_encoded_challenge_string"
 }
 ```
 
@@ -38,21 +28,23 @@ Verifies the Apple App Attest attestation for iOS devices.
 
 ```json
 {
-  "error": "Invalid attestation"
+  "error": "Failed to generate challenge"
 }
 ```
 
-### Generate JWT Token
+### Verify Attestation
 
-Generates a JWT token for authenticated clients.
+Verifies the Apple App Attest attestation and returns a JWT token.
 
-**Endpoint:** `POST /api/auth/token`
+**Endpoint:** `POST /api/auth/verify-attestation`
 
 **Request Body:**
 
 ```json
 {
-  "deviceId": "unique_device_identifier"
+  "attestation": "base64_encoded_attestation",
+  "challenge": "challenge_string",
+  "keyID": "key_identifier"
 }
 ```
 
@@ -68,7 +60,7 @@ Generates a JWT token for authenticated clients.
 
 ```json
 {
-  "error": "Invalid device ID"
+  "error": "Invalid attestation"
 }
 ```
 
@@ -88,23 +80,14 @@ Retrieves comprehensive statistics for a specific lottery type, including freque
 
 ```json
 {
-  "totalDraws": 250, // Each new lottery draw updates total draws by 1
+  "totalDraws": 250,
   "frequency": {
-    // Tracks how many time each number has appeared in a draw
     "1": 15,
     "2": 30,
-    "3": 21,
-    "4": 28,
-    "5": 19,
-    "6": 25,
-    "7": 22,
-    "8": 17,
-    "9": 24,
-    "10": 20
+    "3": 21
     // ... numbers up to 70 for Mega Millions or 69 for Powerball
   },
   "frequencyAtPosition": {
-    // Tracks how many time each number has appeared in a draw at a specific position
     "0": {
       "1": 5,
       "2": 10,
@@ -112,45 +95,16 @@ Retrieves comprehensive statistics for a specific lottery type, including freque
       // ... numbers at first position
     },
     "1": {
-      "3": 8,
-      "4": 12,
-      "5": 6
       // ... numbers at second position
-    },
-    "2": {
-      "7": 9,
-      "8": 11,
-      "9": 7
-      // ... numbers at third position
-    },
-    "3": {
-      "12": 10,
-      "13": 8,
-      "14": 15
-      // ... numbers at fourth position
-    },
-    "4": {
-      "25": 13,
-      "26": 9,
-      "27": 11
-      // ... numbers at fifth position
-    },
-    "5": {
-      "35": 9,
-      "36": 7,
-      "37": 12
-      // ... special ball numbers
     }
+    // ... remaining positions
   },
   "specialBallFrequency": {
-    // Tracks how many time each number has appeared in a draw as a special ball
-    "10": 13,
-    "11": 18,
-    "12": 15
+    "1": 13,
+    "2": 18,
+    "3": 15
     // ... special ball numbers up to 25 for Mega Millions or 26 for Powerball
-  },
-  "optimizedByPosition": [2, 17, 31, 38, 50, 3],
-  "optimizedByGeneralFrequency": [10, 17, 20, 31, 46, 3]
+  }
 }
 ```
 
@@ -158,7 +112,7 @@ Retrieves comprehensive statistics for a specific lottery type, including freque
 
 ```json
 {
-  "error": "Failed to fetch statistics"
+  "error": "Failed to retrieve statistics"
 }
 ```
 
@@ -207,17 +161,15 @@ Returns the most recent lottery draws.
 
 Search for specific lottery draws by numbers and/or special ball.
 
-**Endpoint:** `POST /api/lottery/search`
+**Endpoint:** `GET /api/lottery/search`
 
-**Request Body:**
+**Query Parameters:**
 
-```json
-{
-  "type": "mega-millions",
-  "numbers": [1, 2, 3, 4, 5],
-  "specialBall": 10
-}
-```
+- `type` (required): The type of lottery (`mega-millions` or `powerball`)
+- `numbers` (optional): Comma-separated list of numbers to search for
+- `specialBall` (optional): Special ball number to search for
+
+**Example:** `/api/lottery/search?type=mega-millions&numbers=1,2,3,4,5&specialBall=10`
 
 **Response:**
 
@@ -238,9 +190,9 @@ Search for specific lottery draws by numbers and/or special ball.
 {
   "errors": [
     {
-      "location": "body",
-      "msg": "Numbers must be integers between 1 and 70",
-      "param": "numbers"
+      "location": "query",
+      "msg": "Invalid value",
+      "param": "specialBall"
     }
   ]
 }
@@ -266,6 +218,14 @@ Generate random lottery numbers for a specific lottery type.
 }
 ```
 
+**Error Response:**
+
+```json
+{
+  "error": "Failed to generate random numbers"
+}
+```
+
 ## Common Error Responses
 
 ### 400 Bad Request
@@ -286,14 +246,26 @@ Generate random lottery numbers for a specific lottery type.
 
 ```json
 {
-  "error": "Invalid or missing token"
+  "error": "No token provided"
 }
 ```
 
 ### 500 Internal Server Error
 
+In production:
+
 ```json
 {
-  "error": "Internal server error"
+  "error": "Failed to retrieve lottery draws"
+}
+```
+
+In development:
+
+```json
+{
+  "error": "Failed to retrieve lottery draws",
+  "details": "Detailed error message",
+  "stack": "Error stack trace"
 }
 ```
