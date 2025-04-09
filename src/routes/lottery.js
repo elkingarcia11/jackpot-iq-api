@@ -107,6 +107,12 @@ router.get('/generate-random',
       // Generate 1 random special ball
       const specialBall = Math.floor(Math.random() * maxSpecialBall) + 1;
       
+      // Set no-cache headers for this dynamic endpoint
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      res.set('Surrogate-Control', 'no-store');
+      
       res.json({
         type,
         numbers,

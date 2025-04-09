@@ -31,6 +31,39 @@ function getHoursFromMidnight() {
 }
 
 /**
+ * Calculate the seconds remaining until the next update window
+ * @returns {number} Seconds until next update window
+ */
+function getSecondsUntilNextUpdate() {
+  const now = new Date();
+  const estOptions = { timeZone: 'America/New_York' };
+  const estTime = new Date(now.toLocaleString('en-US', estOptions));
+  
+  const hour = estTime.getHours();
+  const minute = estTime.getMinutes();
+  
+  // If we're already in the update window, return a short time
+  if (isInUpdateWindow()) {
+    return 60; // 1 minute
+  }
+  
+  // Calculate time until 11:50 PM EST
+  let hoursUntil = (23 - hour);
+  let minutesUntil = 50 - minute;
+  
+  if (minutesUntil < 0) {
+    minutesUntil += 60;
+    hoursUntil -= 1;
+  }
+  
+  // Convert to seconds
+  const secondsUntil = (hoursUntil * 60 * 60) + (minutesUntil * 60);
+  
+  // For safety, cap at 24 hours
+  return Math.min(secondsUntil, 24 * 60 * 60);
+}
+
+/**
  * Get appropriate cache duration based on time of day and content type
  * @param {string} contentType - Type of content ('data', 'stats', 'static', etc.)
  * @param {number} defaultDuration - Default duration in seconds
@@ -39,23 +72,30 @@ function getHoursFromMidnight() {
 function getCacheDuration(contentType = 'data', defaultDuration = 300) {
   // If in update window, use short duration
   if (isInUpdateWindow()) {
-    return 60; // 1 minute
+    return 60; // 1 minute during update window
   }
   
-  // If far from update window (more than 12 hours), use longer duration
-  const hoursFromMidnight = getHoursFromMidnight();
-  const isFarFromUpdate = hoursFromMidnight >= 12;
+  // Get seconds until next update
+  const secondsUntilUpdate = getSecondsUntilNextUpdate();
   
-  // Determine appropriate cache duration based on content type and time
+  // Calculate a safe duration that won't go past the update window
+  // We use a safety margin to ensure cache expires before the update window starts
+  const safetyMarginMinutes = 5;
+  const safeDuration = Math.max(60, secondsUntilUpdate - (safetyMarginMinutes * 60));
+  
+  // Determine appropriate cache duration based on content type
   switch (contentType) {
     case 'data':
-      return isFarFromUpdate ? 6 * 60 * 60 : defaultDuration; // 6 hours if far from update
+      // For lottery data, we can cache until just before the next update window
+      return safeDuration;
     case 'stats':
-      return isFarFromUpdate ? 12 * 60 * 60 : Math.max(defaultDuration, 60 * 60); // 12 hours if far from update, minimum 1 hour
+      // Statistics don't change as often, but we'll still expire before update
+      return safeDuration;
     case 'static':
-      return isFarFromUpdate ? 48 * 60 * 60 : 24 * 60 * 60; // 48 or 24 hours
+      // Static content can use the longest cache duration
+      return Math.max(48 * 60 * 60, safeDuration); // 48 hours or until update
     default:
-      return defaultDuration;
+      return Math.min(defaultDuration, safeDuration);
   }
 }
 
@@ -70,6 +110,8 @@ function getETag() {
   if (isInUpdateWindow()) {
     return `W/"${now.toISOString().slice(0, 16)}"`; // Include up to minutes
   } else {
+    // Outside update window, only include date part - this makes the ETag stable
+    // throughout the day, improving client-side caching
     return `W/"${now.toISOString().slice(0, 10)}"`; // Just date part
   }
 }
@@ -77,6 +119,7 @@ function getETag() {
 module.exports = {
   isInUpdateWindow,
   getHoursFromMidnight,
+  getSecondsUntilNextUpdate,
   getCacheDuration,
   getETag
 }; 

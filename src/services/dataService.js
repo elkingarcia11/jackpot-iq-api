@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { Storage } = require('@google-cloud/storage');
-const { isInUpdateWindow, getCacheDuration } = require('../utils/timeUtils');
+const { isInUpdateWindow, getCacheDuration, getSecondsUntilNextUpdate } = require('../utils/timeUtils');
 
 class DataService {
   constructor() {
@@ -38,6 +38,8 @@ class DataService {
     this.memoryCache = {};
     
     // Update cache TTL based on time of day
+    // Since all data except random numbers only changes once a day during the update window,
+    // we can use extremely aggressive caching outside that window
     this.updateCacheTTL();
     
     // Set up cache refresh schedule
@@ -51,10 +53,20 @@ class DataService {
    * Update cache TTL based on time of day
    */
   updateCacheTTL() {
-    // Set TTL based on whether we're in the update window
-    this.cacheTTL = getCacheDuration('data', 5 * 60) * 1000; // Convert seconds to milliseconds
+    if (isInUpdateWindow()) {
+      // Short TTL during update window
+      this.cacheTTL = 60 * 1000; // 1 minute
+    } else {
+      // Outside update window, cache until shortly before the next update
+      // Convert seconds to milliseconds and subtract a safety margin
+      const safetyMarginMs = 5 * 60 * 1000; // 5 minutes
+      this.cacheTTL = (getSecondsUntilNextUpdate() * 1000) - safetyMarginMs;
+      
+      // Ensure TTL is at least 1 minute
+      this.cacheTTL = Math.max(this.cacheTTL, 60 * 1000);
+    }
     
-    console.log(`Cache TTL set to ${this.cacheTTL/60000} minutes (${isInUpdateWindow() ? 'in update window' : 'outside update window'})`);
+    console.log(`Cache TTL set to ${this.cacheTTL/60000} minutes (${isInUpdateWindow() ? 'in update window' : 'until next update window'})`);
     
     return isInUpdateWindow();
   }
