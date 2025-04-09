@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs').promises;
 const dataService = require('./services/dataService');
+const { getCacheDuration, getETag } = require('./utils/timeUtils');
 
 // Verify data directory and files exist
 const verifyDataFiles = async () => {
@@ -69,6 +70,22 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Global default cache control for static resources
+app.use((req, res, next) => {
+  // Skip for dynamic API endpoints that set their own cache headers
+  if (!req.path.startsWith('/api/')) {
+    // Get appropriate cache duration for static content
+    const maxAge = getCacheDuration('static');
+    
+    // Set cache headers
+    res.set('Cache-Control', `public, max-age=${maxAge}`);
+    
+    // Add an appropriate ETag
+    res.set('ETag', getETag());
+  }
+  next();
+});
+
 // Routes
 const lotteryRoutes = require('./routes/lottery');
 const statsRoutes = require('./routes/stats');
@@ -77,6 +94,20 @@ const authRoutes = require('./routes/auth');
 app.use('/api/lottery', lotteryRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/auth', authRoutes);
+
+// Root route - API information
+app.get('/', (req, res) => {
+  res.json({
+    name: 'Jackpot IQ API',
+    description: 'API for lottery data and statistics',
+    version: '1.0.0'
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
