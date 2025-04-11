@@ -56,6 +56,9 @@ const verifyDataFiles = async () => {
 // Initialize the application
 const app = express();
 
+// Trust proxy for correct IP detection when behind a proxy
+app.set('trust proxy', true);
+
 // Middleware
 app.use(helmet());
 app.use(cors());
