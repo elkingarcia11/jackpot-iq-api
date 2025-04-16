@@ -61,7 +61,7 @@ const verifyDataFiles = async () => {
 const app = express();
 
 // Trust proxy for correct IP detection when behind a proxy
-app.set('trust proxy', ['loopback', '127.0.0.1', '::1']);
+app.set('trust proxy', true);
 
 // Middleware
 app.use(helmet());
