@@ -674,7 +674,12 @@ class AppAttestService {
         
         // Check if the keyId appears in the authData (it should be after "appattestdevelop")
         const authDataHex = attestation.authData.toString('hex');
-        const appAttestDevPattern = '617070617474657374646576656c6f70'; // "appattestdevelop" in hex
+        const appAttestDevPattern = '617070617474657374646576656c6f70';
+        
+        // Add detailed logging about the authData
+        console.log('AuthData hex length:', authDataHex.length);
+        console.log('First 32 bytes of authData (hex):', authDataHex.substring(0, 64));
+        console.log('Looking for pattern:', appAttestDevPattern);
         
         if (authDataHex.includes(appAttestDevPattern)) {
           console.log('Found "appattestdevelop" pattern in authData');
@@ -693,6 +698,8 @@ class AppAttestService {
           }
         } else {
           console.error('App attestation pattern not found in authData');
+          // Log the first part of authData where we expect to find the pattern
+          console.log('First 64 bytes of authData where pattern should be:', authDataHex.substring(0, 128));
         }
       } catch (error) {
         console.error('Error during key ID verification:', error);
