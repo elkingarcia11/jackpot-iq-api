@@ -13,9 +13,7 @@ const { getCacheDuration, getETag } = require('./utils/timeUtils');
 // Verify data directory and files exist
 const verifyDataFiles = async () => {
   try {
-    await dataService.ensureDataDir();
-    
-    // Check if required files exist
+    // Check if required files exist in GCS
     const lotteryTypes = ['mega-millions', 'powerball'];
     const filesToCheck = [];
     
@@ -25,31 +23,37 @@ const verifyDataFiles = async () => {
       filesToCheck.push(`${type}-stats`);
     }
     
-    // Check if the files exist
+    // Check if the files exist in GCS
     for (const file of filesToCheck) {
       try {
-        const filePath = dataService.getFilePath(file);
-        await fs.access(filePath);
-        console.log(`Found data file: ${path.basename(filePath)}`);
+        const filePath = dataService.getGCSFilePath(file);
+        const exists = await dataService.bucket.file(filePath).exists();
+        if (exists[0]) {
+          console.log(`Found GCS file: ${filePath}`);
+        }
       } catch (error) {
-        console.warn(`Warning: Data file ${file} not found in data directory`);
+        console.warn(`Warning: File ${file} not found in GCS`);
       }
     }
     
     // Check or create verified devices file
     try {
-      const devicesPath = dataService.getFilePath('verified-devices');
-      await fs.access(devicesPath);
-      console.log('Found verified-devices.json file');
+      const devicesPath = dataService.getGCSFilePath('verified-devices');
+      const exists = await dataService.bucket.file(devicesPath).exists();
+      if (exists[0]) {
+        console.log('Found verified-devices.json in GCS');
+      } else {
+        // Create empty verified devices file if it doesn't exist
+        await dataService.writeData('verified-devices', {});
+        console.log('Created empty verified-devices.json in GCS');
+      }
     } catch (error) {
-      // Create empty verified devices file if it doesn't exist
-      await dataService.writeData('verified-devices', {});
-      console.log('Created empty verified-devices.json file');
+      console.error('Error checking verified-devices.json:', error);
     }
     
-    console.log('Data files check completed');
+    console.log('GCS files check completed');
   } catch (error) {
-    console.error('Error checking data files:', error);
+    console.error('Error checking GCS files:', error);
   }
 };
 
@@ -57,7 +61,7 @@ const verifyDataFiles = async () => {
 const app = express();
 
 // Trust proxy for correct IP detection when behind a proxy
-app.set('trust proxy', true);
+app.set('trust proxy', ['loopback', '127.0.0.1', '::1']);
 
 // Middleware
 app.use(helmet());
