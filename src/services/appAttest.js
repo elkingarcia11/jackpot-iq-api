@@ -618,7 +618,7 @@ class AppAttestService {
       console.log('Starting challenge verification');
       
       if (!attestation.authData) {
-        console.error('Missing authData in attestation for challenge verification');
+        console.error('Missing authData in attestation');
         return false;
       }
       
@@ -628,18 +628,16 @@ class AppAttestService {
       }
       
       // Log only challenge length, not the actual challenge value
-      console.log('Challenge type:', typeof challenge);
       console.log('Challenge length:', challenge.length);
       
       // The authData structure has the nonce at offset 32, with length 32 bytes
       if (attestation.authData.length < 64) {
         console.error('AuthData too short to contain nonce');
-        console.log('AuthData length:', attestation.authData.length);
         return false;
       }
       
       const nonce = attestation.authData.slice(32, 64);
-      console.log('Extracted nonce from authData, length:', nonce.length, 'bytes');
+      console.log('Nonce length:', nonce.length, 'bytes');
       
       // For Apple's App Attestation, instead of matching the challenge directly,
       // we need to verify that the authData contains the key ID from the certificate
@@ -659,7 +657,6 @@ class AppAttestService {
         // Extract the key ID from the subject CN
         // Format is typically: CN=<keyID>
         const subject = leafCert.subject;
-        console.log('Leaf certificate subject:', subject);
         
         // Extract the key ID, which should be the CN value
         const cnMatch = subject.match(/CN=([a-f0-9]+)/i);
@@ -669,13 +666,12 @@ class AppAttestService {
         }
         
         const keyId = cnMatch[1].toLowerCase();
-        // Log only first 8 chars followed by ... to avoid logging the full ID
-        console.log('Extracted key ID from certificate:', keyId.substring(0, 8) + '...');
+        // Log only first 4 chars followed by ... to avoid logging the full ID
+        console.log('Key ID prefix:', keyId.substring(0, 4) + '...');
         
         // Check if the keyId appears in the authData
         const authDataHex = attestation.authData.toString('hex');
-        console.log('AuthData hex length:', authDataHex.length);
-        console.log('First 32 bytes of authData (hex):', authDataHex.substring(0, 64));
+        console.log('AuthData length:', authDataHex.length);
         
         // Try different patterns that might indicate App Attest data
         const patterns = [
@@ -685,16 +681,14 @@ class AppAttestService {
           keyId.substring(0, 16)              // First 8 bytes of keyId
         ];
         
-        console.log('Looking for patterns:', patterns);
-        
         // Check if any of the patterns are found in the authData
         for (const pattern of patterns) {
           if (authDataHex.includes(pattern)) {
-            console.log('Found pattern in authData:', pattern);
+            console.log('Found matching pattern in authData');
             
             // If we found the keyId pattern, that's sufficient
             if (pattern === keyId.substring(0, 16)) {
-              console.log('Found key ID in authData, challenge verification passed ✓');
+              console.log('Challenge verification passed ✓');
               return true;
             }
             
@@ -705,29 +699,22 @@ class AppAttestService {
             const searchRange = authDataHex.substring(searchStart, searchEnd);
             
             if (searchRange.includes(keyId.substring(0, 16))) {
-              console.log('Found key ID near pattern, challenge verification passed ✓');
+              console.log('Challenge verification passed ✓');
               return true;
             }
           }
         }
         
         // If we get here, we didn't find any of the expected patterns
-        console.error('No expected patterns found in authData');
-        console.log('First 64 bytes of authData where patterns should be:', authDataHex.substring(0, 128));
+        console.error('Challenge verification failed: No valid patterns found');
         
       } catch (error) {
-        console.error('Error during key ID verification:', error);
+        console.error('Error during key ID verification:', error.message);
       }
-      
-      // In production, no bypass - strict verification only
-      console.error('Challenge verification failed');
-      
-      // Examine authData in more detail - avoid logging full data
-      console.log('AuthData total length:', attestation.authData.length);
       
       return false;
     } catch (error) {
-      console.error('Challenge verification error:', error);
+      console.error('Challenge verification error:', error.message);
       return false;
     }
   }
