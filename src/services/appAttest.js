@@ -672,35 +672,49 @@ class AppAttestService {
         // Log only first 8 chars followed by ... to avoid logging the full ID
         console.log('Extracted key ID from certificate:', keyId.substring(0, 8) + '...');
         
-        // Check if the keyId appears in the authData (it should be after "appattestdevelop")
+        // Check if the keyId appears in the authData
         const authDataHex = attestation.authData.toString('hex');
-        const appAttestDevPattern = '617070617474657374646576656c6f70';
-        
-        // Add detailed logging about the authData
         console.log('AuthData hex length:', authDataHex.length);
         console.log('First 32 bytes of authData (hex):', authDataHex.substring(0, 64));
-        console.log('Looking for pattern:', appAttestDevPattern);
         
-        if (authDataHex.includes(appAttestDevPattern)) {
-          console.log('Found "appattestdevelop" pattern in authData');
-          
-          // The keyId should be shortly after this pattern
-          // For Apple attestations, we should find the first few characters of the keyId
-          // We don't need to check the entire keyId as the format is proprietary
-          const keyIdStart = keyId.substring(0, 16); // Take first 8 bytes of keyId
-          
-          if (authDataHex.includes(keyIdStart)) {
-            console.log('Found key ID in authData, challenge verification passed ✓');
-            return true;
-          } else {
-            console.error('Key ID not found in authData');
-            console.log('Expected to find:', keyIdStart.substring(0, 8) + '...');
+        // Try different patterns that might indicate App Attest data
+        const patterns = [
+          '617070617474657374646576656c6f70', // "appattestdevelop"
+          '617070617474657374',               // "appattest"
+          '6170706c65',                       // "apple"
+          keyId.substring(0, 16)              // First 8 bytes of keyId
+        ];
+        
+        console.log('Looking for patterns:', patterns);
+        
+        // Check if any of the patterns are found in the authData
+        for (const pattern of patterns) {
+          if (authDataHex.includes(pattern)) {
+            console.log('Found pattern in authData:', pattern);
+            
+            // If we found the keyId pattern, that's sufficient
+            if (pattern === keyId.substring(0, 16)) {
+              console.log('Found key ID in authData, challenge verification passed ✓');
+              return true;
+            }
+            
+            // For other patterns, check if the keyId is nearby
+            const patternIndex = authDataHex.indexOf(pattern);
+            const searchStart = Math.max(0, patternIndex - 64); // Look 32 bytes before
+            const searchEnd = Math.min(authDataHex.length, patternIndex + 128); // Look 64 bytes after
+            const searchRange = authDataHex.substring(searchStart, searchEnd);
+            
+            if (searchRange.includes(keyId.substring(0, 16))) {
+              console.log('Found key ID near pattern, challenge verification passed ✓');
+              return true;
+            }
           }
-        } else {
-          console.error('App attestation pattern not found in authData');
-          // Log the first part of authData where we expect to find the pattern
-          console.log('First 64 bytes of authData where pattern should be:', authDataHex.substring(0, 128));
         }
+        
+        // If we get here, we didn't find any of the expected patterns
+        console.error('No expected patterns found in authData');
+        console.log('First 64 bytes of authData where patterns should be:', authDataHex.substring(0, 128));
+        
       } catch (error) {
         console.error('Error during key ID verification:', error);
       }
